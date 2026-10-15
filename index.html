@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-uel/VAhytYj/iV1OyfFV9CuCvnvasxOQc82erUu1eSE='; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'none'; connect-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-iC3qPhQLKRXiKS2GidKGkRSBd7uN8wrO5/ERuH71zyQ='; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'none'; connect-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="description" content="Paste Coral pseudocode, clean up LucidChart's non-breaking spaces, and copy a zyBooks Coral simulator link.">
 <title>Coral Link Builder</title>
@@ -81,13 +81,23 @@ textarea:focus-visible, button:focus-visible, a:focus-visible, input:focus-visib
 .linkbar .actions { justify-content: flex-start; }
 .linkbar .status { flex: 1 1 260px; min-width: 0; }
 
+/* program input: one short row above the code boxes */
+.inputrow { display: grid; grid-template-columns: 1fr; gap: 6px 16px; }
+.inputrow textarea { height: calc(2 * 1.55em + 26px); white-space: pre-wrap; overflow-y: auto; }
+.inputrow .sent { font-family: var(--font-code); font-size: 0.82rem; color: var(--muted); word-break: break-all; }
+.inputrow .bad { color: var(--mark); background: var(--mark-bg); border-radius: 2px; padding: 0 2px; }
+@media (min-width: 900px) {
+  .inputrow { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
+  .inputrow > label { grid-column: 1 / -1; }
+}
+
 /* the two code boxes: fixed height, scroll inside */
 .panes { display: grid; grid-template-columns: 1fr; gap: 16px; }
 .pane { display: grid; grid-template-rows: auto 1fr auto; gap: 8px; min-width: 0; }
 .pane textarea, .pane .preview { height: clamp(220px, 42vh, 520px); }
 @media (min-width: 900px) {
   .panes { grid-template-columns: 1fr 1fr; }
-  .pane textarea, .pane .preview { height: clamp(300px, calc(100vh - 330px), 900px); }
+  .pane textarea, .pane .preview { height: clamp(300px, calc(100vh - 430px), 900px); }
 }
 .actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
 button, .btn {
@@ -111,7 +121,7 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
 <div class="wrap">
   <header>
     <h1>Coral Link Builder</h1>
-    <p>Paste Coral pseudocode, and this page builds a link that opens it in the zyBooks Coral simulator. Non-breaking spaces from LucidChart are cleaned out first.</p>
+    <p>Paste Coral pseudocode and any program input, and this page builds a link that opens it in the zyBooks Coral simulator. Non-breaking spaces from LucidChart are cleaned out first.</p>
   </header>
 
   <section class="linkbar" aria-label="Simulator link">
@@ -123,6 +133,12 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
       <span class="toast" id="toast" role="status" aria-live="polite"></span>
     </div>
     <div class="url" id="url"></div>
+  </section>
+
+  <section class="inputrow">
+    <label for="input">Program input (optional)</label>
+    <textarea id="input" spellcheck="false" autocomplete="off" autocapitalize="off" inputmode="decimal" placeholder="Numbers separated by spaces, for example: 5 10 15"></textarea>
+    <div class="legend" id="inputStatus"></div>
   </section>
 
   <div class="panes">
@@ -141,7 +157,7 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
 </div>
 
 <script>
-const BASE = "https://coral-sim.zybooks.com/?input=%20&code=";
+const SIM = "https://coral-sim.zybooks.com/";
 const NBSP = /\u00A0/g;
 
 // Coral indents in steps of exactly 3 spaces. LucidChart mixes non-breaking
@@ -163,11 +179,17 @@ function cleanLines(text) {
   return out;
 }
 function clean(text) { return cleanLines(text).map(l => l.text).join("\n"); }
-function buildLink(text) {
-  return BASE + encodeURIComponent(clean(text));
+// Program input is numbers separated by single spaces. Returns, tabs, NBSPs and
+// runs of spaces all collapse to one space; an empty box sends a single space.
+const NUMBER = /^[-+]?(\d+(\.\d*)?|\.\d+)$/;
+function inputTokens(text) { return text.split(/[\s\u00A0]+/).filter(Boolean); }
+function cleanInput(text) { return inputTokens(text).join(" ") || " "; }
+function buildLink(code, input) {
+  return SIM + "?input=" + encodeURIComponent(cleanInput(input)) + "&code=" + encodeURIComponent(clean(code));
 }
 
 const $ = id => document.getElementById(id);
+const inputEl = $("input"), inputStatusEl = $("inputStatus");
 const codeEl = $("code"), previewEl = $("preview"), urlEl = $("url"), statusEl = $("status");
 const copyBtn = $("copy"), openLink = $("open"), toast = $("toast");
 
@@ -201,8 +223,31 @@ function render() {
     statusEl.className = "status clean";
   }
 
+  const tokens = inputTokens(inputEl.value);
+  const badTokens = tokens.filter(t => !NUMBER.test(t));
+  inputStatusEl.replaceChildren();
+  if (!tokens.length) {
+    inputStatusEl.textContent = "No input: the simulator starts with an empty input box.";
+    inputStatusEl.className = "legend";
+  } else {
+    const sent = document.createElement("span");
+    sent.className = "sent";
+    tokens.forEach((t, i) => {
+      if (i) sent.append(" ");
+      const s = document.createElement("span");
+      s.textContent = t;
+      if (!NUMBER.test(t)) s.className = "bad";
+      sent.append(s);
+    });
+    inputStatusEl.append(badTokens.length
+      ? (badTokens.length === 1 ? "This entry isn't a number" : "These entries aren't numbers") +
+        ", so the simulator may stop with an error. Use spaces, not commas, between numbers. Sent as: "
+      : tokens.length + " number" + (tokens.length === 1 ? "" : "s") + ", sent as: ", sent);
+    inputStatusEl.className = badTokens.length ? "legend status found" : "legend";
+  }
+
   const empty = !raw.trim();
-  const link = empty ? "" : buildLink(raw);
+  const link = empty ? "" : buildLink(raw, inputEl.value);
   urlEl.textContent = link || "The link appears here once you paste code.";
   copyBtn.disabled = empty;
   openLink.href = link || "#";
@@ -231,8 +276,9 @@ copyBtn.addEventListener("click", () => {
   } else fallback();
 });
 
-$("clear").addEventListener("click", () => { codeEl.value = ""; render(); codeEl.focus(); });
+$("clear").addEventListener("click", () => { codeEl.value = ""; inputEl.value = ""; render(); codeEl.focus(); });
 codeEl.addEventListener("input", render);
+inputEl.addEventListener("input", render);
 // keep the cleaned view lined up with the code box while scrolling
 codeEl.addEventListener("scroll", () => { previewEl.scrollTop = codeEl.scrollTop; previewEl.scrollLeft = codeEl.scrollLeft; });
 let tabEscapes = false;
@@ -248,7 +294,7 @@ codeEl.addEventListener("keydown", e => {
 
 // Always start empty: nothing is saved between visits, and a page restored
 // by the browser's Back button is cleared as well.
-function reset() { codeEl.value = ""; render(); }
+function reset() { codeEl.value = ""; inputEl.value = ""; render(); }
 window.addEventListener("pageshow", reset);
 reset();
 </script>
