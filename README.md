@@ -13,17 +13,3 @@ Paste Coral pseudocode and get a link that opens it in the
 
 Everything runs in the browser. Nothing you paste is sent anywhere or saved: the page opens
 empty every time.
-
-## Publishing on GitHub Pages
-
-The whole site is the single file `index.html`. Push this folder to a GitHub repository, then
-under **Settings → Pages** choose **Deploy from a branch**, branch `main`, folder `/ (root)`.
-
-## Editing `index.html`
-
-- The page has a Content-Security-Policy that only lets its own script run, by matching a
-  SHA-256 hash of that script. **If you change anything between `<script>` and `</script>`,
-  the hash must be updated or the page will stop working.** The browser console names the
-  new hash it expected; copy it into the `script-src 'sha256-…'` part of the policy.
-- In the script, non-breaking spaces are written as ` `. Keep them written that way,
-  never as the invisible character itself, which editors can silently turn into a normal space.
